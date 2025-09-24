@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>우리반 성장 이야기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding:wght@400;700&family=Jua&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body {
+            font-family: 'Nanum Gothic Coding', monospace;
+            background-color: #f0f9ff;
+        }
+        .font-jua {
+            font-family: 'Jua', sans-serif;
+        }
+        .student-list-item {
+            transition: all 0.2s ease-in-out;
+        }
+        .student-list-item:hover {
+            transform: scale(1.05);
+            background-color: #fecaca;
+        }
+        .tab-button {
+            transition: all 0.2s;
+            border-bottom: 4px solid transparent;
+        }
+        .tab-button.active {
+            border-bottom-color: #f59e0b;
+            color: #f59e0b;
+        }
+        .stamp-grid {
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        }
+        .heart-level-1::before { content: '❤️'; margin-right: 4px; }
+        .heart-level-2::before { content: '💖'; margin-right: 4px; }
+        .heart-level-3::before { content: '💝'; margin-right: 4px; }
+
+        .swal2-popup {
+            font-family: 'Jua', sans-serif;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="main-container" class="max-w-7xl mx-auto">
+        
+        <!-- 초기 화면 -->
+        <div id="initial-screen" class="text-center p-8 bg-white rounded-2xl shadow-lg">
+            <h1 class="text-5xl font-jua text-sky-600 mb-4">🏫 우리반 성장 이야기 🚀</h1>
+            <p class="text-gray-600 mb-8">모드 버튼을 눌러 시작하세요!</p>
+            <div class="flex justify-center gap-4">
+                <button onclick="showModeSelect('teacher')" class="px-8 py-4 bg-blue-500 text-white font-bold rounded-lg text-2xl font-jua shadow-md hover:bg-blue-600 transition">👩‍🏫 교사 모드</button>
+                <button onclick="showModeSelect('student')" class="px-8 py-4 bg-rose-500 text-white font-bold rounded-lg text-2xl font-jua shadow-md hover:bg-rose-600 transition">🎒 학생 모드</button>
+            </div>
+        </div>
+
+        <!-- 학생 선택 화면 -->
+        <div id="student-select-screen" class="hidden">
+            <button onclick="showInitialScreen()" class="mb-4 px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"> &larr; 뒤로가기</button>
+            <div class="bg-white p-8 rounded-2xl shadow-lg">
+                <h2 id="student-select-title" class="text-3xl font-jua text-center mb-6">누구인가요? 이름을 선택해주세요.</h2>
+                <div id="student-list" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 text-center">
+                    <!-- 학생 목록이 여기에 동적으로 추가됩니다 -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- 메인 콘텐츠 영역 -->
+        <div id="content-area" class="hidden">
+            <!-- 내용이 여기에 동적으로 추가됩니다 -->
+        </div>
+
+    </div>
+
+    <script>
+        let currentMode = ''; // 'teacher' or 'student'
+        let selectedStudentId = null;
+        let activeTab = 'exp';
+        let schoolData = {};
+
+        const studentNames = ["건우", "나영", "다솔", "둘군", "민경", "민준", "민하", "서우", "소율", "예운", "유진", "윤우", "지현", "준우", "하영", "하준", "현수", "혜나"];
+        studentNames.sort(); // 이름 가나다순 정렬
+
+        const stampCategories = {
+            life: ['봉사', '예의', '양보', '성실', '바른 언어', '질서', '책임', '행복', '리더십', '집중력', '청결', '협동', '센스', '열정', '받아쓰기', '평화', '기부'],
+            learning: ['국어', '수학', '사회', '영어', '과학', '아침활동', '음악', '미술', '체육', '발표', '수업 태도', '창의력', '독서', '바른 글씨', '노력', '한글 타자']
+        };
+
+        // 초기 데이터 설정
+        function initializeData() {
+            const initialData = {
+                teacherPassword: '1006',
+                students: studentNames.map((name, index) => ({
+                    id: index,
+                    name: name,
+                    password: '0000',
+                    totalExp: 0,
+                    praiseHearts: 0,
+                    stamps: {},
+                    titles: [],
+                    lastExpSubmissionDate: null,
+                    pendingStamps: [] // 가치도장 요청을 위한 배열 추가
+                }))
+            };
+            // 가치도장 초기화
+            initialData.students.forEach(student => {
+                stampCategories.life.forEach(name => student.stamps[name] = 0);
+                stampCategories.learning.forEach(name => student.stamps[name] = 0);
+            });
+            return initialData;
+        }
+
+        // 데이터 로드 및 저장
+        function loadData() {
+            const data = localStorage.getItem('schoolData');
+            schoolData = data ? JSON.parse(data) : initializeData();
+            // 데이터 구조 변경에 따른 호환성 코드
+            schoolData.students.forEach(student => {
+                if (!student.pendingStamps) {
+                    student.pendingStamps = [];
+                }
+            });
+        }
+
+        function saveData() {
+            localStorage.setItem('schoolData', JSON.stringify(schoolData));
+        }
+
+        function goBackToStudentSelect() {
+            document.getElementById('content-area').classList.add('hidden');
+            document.getElementById('student-select-screen').classList.remove('hidden');
+            selectedStudentId = null;
+        }
+
+        // 화면 전환 함수
+        function showInitialScreen() {
+            document.getElementById('initial-screen').classList.remove('hidden');
+            document.getElementById('student-select-screen').classList.add('hidden');
+            document.getElementById('content-area').classList.add('hidden');
+            selectedStudentId = null;
+            currentMode = '';
+        }
+
+        async function showModeSelect(mode) {
+            if (mode === 'teacher') {
+                const { value: password } = await Swal.fire({
+                    title: '교사 모드',
+                    input: 'password',
+                    inputLabel: '비밀번호를 입력하세요',
+                    inputPlaceholder: '비밀번호 입력',
+                    inputAttributes: {
+                        autocapitalize: 'off',
+                        autocorrect: 'off'
+                    },
+                    showCancelButton: true,
+                    confirmButtonText: '확인',
+                    cancelButtonText: '취소'
+                });
+
+                if (password === schoolData.teacherPassword) {
+                    currentMode = 'teacher';
+                } else if (password) {
+                    Swal.fire('오류', '비밀번호가 틀렸습니다.', 'error');
+                    return;
+                } else {
+                    return; // 사용자가 취소한 경우
+                }
+            } else {
+                currentMode = mode;
+            }
+            
+            document.getElementById('initial-screen').classList.add('hidden');
+            document.getElementById('student-select-screen').classList.remove('hidden');
+            
+            const title = currentMode === 'teacher' ? '👩‍🏫 관리할 학생을 선택해주세요.' : '🎒 본인 이름을 선택해주세요.';
+            document.getElementById('student-select-title').innerText = title;
+
+            const studentListContainer = document.getElementById('student-list');
+            studentListContainer.innerHTML = '';
+            schoolData.students.forEach(student => {
+                const studentDiv = document.createElement('div');
+                studentDiv.className = 'p-4 bg-amber-200 rounded-lg cursor-pointer student-list-item font-jua text-xl';
+                studentDiv.innerText = student.name;
+                studentDiv.onclick = () => handleStudentSelect(student.id);
+                studentListContainer.appendChild(studentDiv);
+            });
+        }
+
+        async function handleStudentSelect(studentId) {
+            selectedStudentId = studentId;
+            
+            if (currentMode === 'teacher') {
+                showContentArea();
+                return;
+            }
+
+            // 학생 모드인 경우에만 비밀번호를 묻습니다.
+            const student = schoolData.students.find(s => s.id === studentId);
+            const { value: inputPassword } = await Swal.fire({
+                title: `${student.name} 학생`,
+                input: 'password',
+                inputLabel: '비밀번호를 입력하세요',
+                inputPlaceholder: '비밀번호 입력',
+                inputAttributes: {
+                    autocapitalize: 'off',
+                    autocorrect: 'off'
+                },
+                showCancelButton: true,
+                confirmButtonText: '확인',
+                cancelButtonText: '취소'
+            });
+
+            if (inputPassword === student.password) {
+                showContentArea();
+            } else if (inputPassword) {
+                 Swal.fire('오류', '비밀번호가 틀렸습니다.', 'error');
+            }
+        }
+        
+        function showContentArea() {
+            document.getElementById('student-select-screen').classList.add('hidden');
+            document.getElementById('content-area').classList.remove('hidden');
+            activeTab = 'exp';
+            renderContentArea();
+        }
+
+        // 메인 콘텐츠 렌더링
+        function renderContentArea() {
+            const student = schoolData.students.find(s => s.id === selectedStudentId);
+            const level = Math.floor(student.totalExp / 100);
+            const exp = student.totalExp % 100;
+
+            const contentHTML = `
+                <div class="bg-white p-6 rounded-2xl shadow-lg">
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <button onclick="goBackToStudentSelect()" class="mb-2 px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">&larr; 학생선택</button>
+                            <h2 class="text-4xl font-jua">${student.name}</h2>
+                            <p class="text-xl text-gray-700">레벨: <span class="font-bold text-green-600">${level}</span> | 경험치: <span class="font-bold text-blue-600">${exp} / 100</span></p>
+                        </div>
+                    </div>
+
+                    <div class="border-b-2 border-gray-200 mb-4">
+                        <nav class="-mb-0.5 flex space-x-6">
+                            <button onclick="changeTab('exp')" class="py-4 px-1 inline-flex items-center gap-2 text-lg font-medium whitespace-nowrap text-gray-500 hover:text-amber-600 tab-button ${activeTab === 'exp' ? 'active' : ''}">경험치</button>
+                            <button onclick="changeTab('stamps')" class="py-4 px-1 inline-flex items-center gap-2 text-lg font-medium whitespace-nowrap text-gray-500 hover:text-amber-600 tab-button ${activeTab === 'stamps' ? 'active' : ''}">가치도장</button>
+                            <button onclick="changeTab('titles')" class="py-4 px-1 inline-flex items-center gap-2 text-lg font-medium whitespace-nowrap text-gray-500 hover:text-amber-600 tab-button ${activeTab === 'titles' ? 'active' : ''}">칭호</button>
+                            <button onclick="changeTab('settings')" class="py-4 px-1 inline-flex items-center gap-2 text-lg font-medium whitespace-nowrap text-gray-500 hover:text-amber-600 tab-button ${activeTab === 'settings' ? 'active' : ''}">설정</button>
+                        </nav>
+                    </div>
+
+                    <div id="tab-content">
+                        <!-- 탭 내용이 여기에 동적으로 추가됩니다 -->
+                    </div>
+                </div>
+            `;
+            document.getElementById('content-area').innerHTML = contentHTML;
+            renderTabContent();
+        }
+
+        function changeTab(tabName) {
+            activeTab = tabName;
+            renderContentArea();
+        }
+
+        function renderTabContent() {
+            if (activeTab === 'exp') renderExpTab();
+            else if (activeTab === 'stamps') renderStampsTab();
+            else if (activeTab === 'titles') renderTitlesTab();
+            else if (activeTab === 'settings') renderSettingsTab();
+        }
+        
+        // 각 탭 렌더링 함수들
+        function renderExpTab() {
+            const container = document.getElementById('tab-content');
+            const student = schoolData.students.find(s => s.id === selectedStudentId);
+            let content = '';
+
+            if (currentMode === 'teacher') {
+                content = `
+                    <div class="p-4 bg-gray-50 rounded-lg">
+                        <h3 class="text-2xl font-bold mb-4">레벨/경험치 수정</h3>
+                        <div class="flex items-center gap-4">
+                            <input type="number" id="level-input" class="p-2 border rounded w-full" placeholder="레벨" value="${Math.floor(student.totalExp / 100)}">
+                            <input type="number" id="exp-input" class="p-2 border rounded w-full" placeholder="경험치" value="${student.totalExp % 100}">
+                            <button onclick="updateExp()" class="px-6 py-2 bg-green-500 text-white font-bold rounded hover:bg-green-600">수정</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                 const today = new Date();
+                 const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                 const dayOfWeek = today.getDay(); // 0(일) ~ 6(토)
+                 const canSubmit = (dayOfWeek >= 1 && dayOfWeek <= 5) && student.lastExpSubmissionDate !== todayStr;
+                
+                 content = `
+                    <div class="p-4 bg-gray-50 rounded-lg">
+                        <div class="flex justify-between items-center mb-4">
+                             <h3 class="text-2xl font-bold">경험치 등록 (${todayStr})</h3>
+                             ${!canSubmit ? `<span class="px-3 py-1 bg-yellow-200 text-yellow-800 text-sm font-bold rounded-full">오늘은 이미 등록했거나, 주말입니다.</span>` : ''}
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            ${generateExpItem('태도', 5, canSubmit)}
+                            ${generateExpItem('봉사', 5, canSubmit)}
+                            ${generateExpItem('인사', 5, canSubmit)}
+                            ${generateExpItem('가치', 5, canSubmit)}
+                            ${generateExpItem('발표', 5, canSubmit)}
+                            ${generateExpItem('칭찬', 5, canSubmit)}
+                            ${generateExpItem('직업', 10, canSubmit && dayOfWeek === 5)}
+                            <div class="p-3 bg-white rounded-lg shadow">
+                                <label class="font-semibold">칭호 (개당 40점)</label>
+                                <select id="title-count" onchange="calculateTotalGainedExp()" class="mt-1 w-full p-1 border rounded" ${!canSubmit ? 'disabled' : ''}>
+                                    <option value="0">0개</option><option value="1">1개</option><option value="2">2개</option><option value="3">3개</option>
+                                </select>
+                            </div>
+                            <div class="p-3 bg-white rounded-lg shadow col-span-2 md:col-span-4">
+                                <label class="font-semibold">기타 (직접입력)</label>
+                                <div class="flex gap-2 mt-1">
+                                    <input type="number" id="etc-exp" oninput="calculateTotalGainedExp()" class="p-1 border rounded w-1/4" placeholder="점수" ${!canSubmit ? 'disabled' : ''}>
+                                    <input type="text" id="etc-reason" class="p-1 border rounded w-3/4" placeholder="이유" ${!canSubmit ? 'disabled' : ''}>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-6 text-right">
+                             <span class="text-xl font-bold mr-4">총 획득 경험치: <span id="total-gained-exp" class="text-red-500">0</span>점</span>
+                             <button onclick="submitExp()" class="px-8 py-3 bg-rose-500 text-white font-bold text-xl rounded-lg hover:bg-rose-600" ${!canSubmit ? 'disabled' : ''}>등록하기</button>
+                        </div>
+                    </div>
+                 `;
+            }
+            container.innerHTML = content;
+        }
+
+        function generateExpItem(name, exp, enabled) {
+            return `
+                <div class="p-3 bg-white rounded-lg shadow flex items-center justify-between">
+                    <label for="exp-${name}" class="font-semibold">${name} (${exp}점)</label>
+                    <input type="checkbox" id="exp-${name}" data-exp="${exp}" onchange="calculateTotalGainedExp()" class="exp-checkbox h-6 w-6" ${!enabled ? 'disabled' : ''}>
+                </div>
+            `;
+        }
+        
+        function renderStampsTab() {
+            const container = document.getElementById('tab-content');
+            const student = schoolData.students.find(s => s.id === selectedStudentId);
+            let finalHTML = '';
+
+            // --- 요청 관련 UI ---
+            if (currentMode === 'teacher') {
+                if (student.pendingStamps && student.pendingStamps.length > 0) {
+                    finalHTML += `
+                        <div class="p-4 mb-6 bg-orange-100 border-l-4 border-orange-500 rounded-r-lg">
+                            <h4 class="text-lg font-bold text-orange-800 mb-2">학생 요청 대기</h4>
+                            <ul class="space-y-2">
+                                ${student.pendingStamps.map((stamp, index) => `
+                                    <li class="flex justify-between items-center bg-white p-2 rounded shadow-sm">
+                                        <span>${stamp.name} <span class="text-xs text-gray-500">(${stamp.date})</span></span>
+                                        <div>
+                                            <button onclick="handleStampRequest(${index}, true)" class="text-sm py-1 px-2 bg-green-500 text-white rounded hover:bg-green-600">승인</button>
+                                            <button onclick="handleStampRequest(${index}, false)" class="text-sm py-1 px-2 bg-red-500 text-white rounded hover:bg-red-600 ml-1">반려</button>
+                                        </div>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+            } else { // Student Mode
+                finalHTML += `
+                    <div class="p-4 mb-6 bg-sky-50 rounded-lg shadow">
+                        <h3 class="text-xl font-bold text-sky-700 mb-3">오늘 받을 가치도장 요청</h3>
+                        <div class="flex items-center gap-2">
+                            <select id="stamp-request-select" class="flex-grow p-2 border rounded-md">
+                                <optgroup label="🌷 생활">
+                                    ${stampCategories.life.map(name => `<option value="${name}">${name}</option>`).join('')}
+                                </optgroup>
+                                <optgroup label="📚 학습">
+                                    ${stampCategories.learning.map(name => `<option value="${name}">${name}</option>`).join('')}
+                                </optgroup>
+                            </select>
+                            <button onclick="requestStamp()" class="py-2 px-4 bg-sky-500 text-white font-semibold rounded-lg hover:bg-sky-600">요청</button>
+                        </div>
+                    </div>
+                `;
+                if (student.pendingStamps && student.pendingStamps.length > 0) {
+                     finalHTML += `
+                        <div class="p-4 mb-6 bg-gray-100 rounded-lg">
+                            <h4 class="text-lg font-bold text-gray-700 mb-2">요청 대기중인 도장</h4>
+                            <ul class="list-disc list-inside text-gray-600">
+                                ${student.pendingStamps.map(stamp => `<li>${stamp.name} (${stamp.date})</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+            }
+
+
+            // --- 기존 가치도장 표시 UI ---
+            let lifeStampsHTML = ``;
+            stampCategories.life.forEach(name => {
+                const count = student.stamps[name] || 0;
+                if (currentMode === 'teacher') {
+                     lifeStampsHTML += `
+                        <div class="p-3 bg-white rounded-lg shadow flex justify-between items-center">
+                            <span class="font-semibold">${name} (${count})</span>
+                            <div>
+                                <button onclick="updateStamp('${name}', 1)" class="w-8 h-8 bg-blue-500 text-white rounded-full text-lg">+</button>
+                                <button onclick="updateStamp('${name}', -1)" class="w-8 h-8 bg-red-500 text-white rounded-full text-lg ml-1">-</button>
+                            </div>
+                        </div>`;
+                } else {
+                    const level1_stamps = Math.min(count, 10);
+                    const level2_stamps = Math.max(0, Math.min(count - 10, 10));
+                    const level3_stamps = Math.max(0, count - 20);
+                    
+                    lifeStampsHTML += `
+                        <div class="p-3 bg-white rounded-lg shadow">
+                            <p class="font-bold text-center">${name}</p>
+                            <div class="text-xs text-center text-gray-600 mt-2 flex flex-col items-center">
+                                ${level3_stamps > 0 ? `<span class="heart-level-3">3단계: ${level3_stamps}개</span>` : ''}
+                                ${level2_stamps > 0 ? `<span class="heart-level-2">2단계: ${level2_stamps}개</span>` : ''}
+                                ${level1_stamps > 0 ? `<span class="heart-level-1">1단계: ${level1_stamps}개</span>` : ''}
+                                ${count === 0 ? '<span>없음</span>' : ''}
+                            </div>
+                            <p class="text-center font-bold text-sm mt-1">${count}개</p>
+                        </div>`;
+                }
+            });
+
+            let learningStampsHTML = ``;
+            stampCategories.learning.forEach(name => {
+                const count = student.stamps[name] || 0;
+                if (currentMode === 'teacher') {
+                     learningStampsHTML += `
+                        <div class="p-3 bg-white rounded-lg shadow flex justify-between items-center">
+                            <span class="font-semibold">${name} (${count})</span>
+                            <div>
+                                <button onclick="updateStamp('${name}', 1)" class="w-8 h-8 bg-blue-500 text-white rounded-full text-lg">+</button>
+                                <button onclick="updateStamp('${name}', -1)" class="w-8 h-8 bg-red-500 text-white rounded-full text-lg ml-1">-</button>
+                            </div>
+                        </div>`;
+                } else {
+                    const level1_stamps = Math.min(count, 10);
+                    const level2_stamps = Math.max(0, Math.min(count - 10, 10));
+                    const level3_stamps = Math.max(0, count - 20);
+
+                    learningStampsHTML += `
+                        <div class="p-3 bg-white rounded-lg shadow">
+                            <p class="font-bold text-center">${name}</p>
+                            <div class="text-xs text-center text-gray-600 mt-2 flex flex-col items-center">
+                                ${level3_stamps > 0 ? `<span class="heart-level-3">3단계: ${level3_stamps}개</span>` : ''}
+                                ${level2_stamps > 0 ? `<span class="heart-level-2">2단계: ${level2_stamps}개</span>` : ''}
+                                ${level1_stamps > 0 ? `<span class="heart-level-1">1단계: ${level1_stamps}개</span>` : ''}
+                                ${count === 0 ? '<span>없음</span>' : ''}
+                            </div>
+                             <p class="text-center font-bold text-sm mt-1">${count}개</p>
+                        </div>`;
+                }
+            });
+
+            finalHTML += `
+                <div class="space-y-6">
+                    <div>
+                        <h3 class="text-2xl font-bold mb-3 text-pink-600">🌷 생활</h3>
+                        <div class="grid gap-3 stamp-grid">${lifeStampsHTML}</div>
+                    </div>
+                    <div>
+                        <h3 class="text-2xl font-bold mb-3 text-indigo-600">📚 학습</h3>
+                        <div class="grid gap-3 stamp-grid">${learningStampsHTML}</div>
+                    </div>
+                </div>
+            `;
+            container.innerHTML = finalHTML;
+        }
+
+        function renderTitlesTab() {
+            const container = document.getElementById('tab-content');
+            const student = schoolData.students.find(s => s.id === selectedStudentId);
+            
+            let titlesHTML = student.titles.map((title, index) => `
+                <tr class="hover:bg-gray-50">
+                    <td class="p-3 border-b">${title.date}</td>
+                    <td class="p-3 border-b">${title.name}</td>
+                    <td class="p-3 border-b">${title.growth}</td>
+                    <td class="p-3 border-b text-center">
+                        <button onclick="editTitle(${index})" class="text-sm py-1 px-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">수정</button>
+                        <button onclick="deleteTitle(${index})" class="text-sm py-1 px-2 bg-red-500 text-white rounded hover:bg-red-600 ml-1">삭제</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            container.innerHTML = `
+                <div class="p-4 bg-gray-50 rounded-lg">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-2xl font-bold">칭호 명예의 전당</h3>
+                        <button onclick="addTitle()" class="px-4 py-2 bg-blue-500 text-white font-bold rounded hover:bg-blue-600">칭호 추가</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="bg-gray-200">
+                                    <th class="p-3">날짜</th>
+                                    <th class="p-3">획득한 칭호</th>
+                                    <th class="p-3">성장</th>
+                                    <th class="p-3 text-center">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${titlesHTML || `<tr><td colspan="4" class="p-4 text-center text-gray-500">아직 획득한 칭호가 없습니다.</td></tr>`}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSettingsTab() {
+            const container = document.getElementById('tab-content');
+            const student = schoolData.students.find(s => s.id === selectedStudentId);
+            let content = '';
+            if (currentMode === 'teacher') {
+                content = `
+                     <div class="p-4 bg-gray-50 rounded-lg max-w-md mx-auto">
+                        <h3 class="text-2xl font-bold mb-4">교사 비밀번호 변경</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label for="current-pw" class="block font-semibold">현재 비밀번호</label>
+                                <input type="password" id="current-pw" class="p-2 border rounded w-full">
+                            </div>
+                            <div>
+                                <label for="new-pw" class="block font-semibold">새 비밀번호</label>
+                                <input type="password" id="new-pw" class="p-2 border rounded w-full">
+                            </div>
+                            <div>
+                                <label for="confirm-pw" class="block font-semibold">새 비밀번호 확인</label>
+                                <input type="password" id="confirm-pw" class="p-2 border rounded w-full">
+                            </div>
+                            <button onclick="changeTeacherPassword()" class="w-full mt-4 px-6 py-2 bg-indigo-500 text-white font-bold rounded hover:bg-indigo-600">비밀번호 변경</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                content = `
+                    <div class="p-4 bg-gray-50 rounded-lg max-w-md mx-auto">
+                        <h3 class="text-2xl font-bold mb-4">학생 비밀번호 변경</h3>
+                         <div class="space-y-3">
+                            <div>
+                                <label for="current-pw-student" class="block font-semibold">현재 비밀번호</label>
+                                <input type="password" id="current-pw-student" class="p-2 border rounded w-full">
+                            </div>
+                            <div>
+                                <label for="new-pw-student" class="block font-semibold">새 비밀번호</label>
+                                <input type="password" id="new-pw-student" class="p-2 border rounded w-full">
+                            </div>
+                             <div>
+                                <label for="confirm-pw-student" class="block font-semibold">새 비밀번호 확인</label>
+                                <input type="password" id="confirm-pw-student" class="p-2 border rounded w-full">
+                            </div>
+                            <button onclick="changeStudentPassword()" class="w-full mt-4 px-6 py-2 bg-indigo-500 text-white font-bold rounded hover:bg-indigo-600">비밀번호 변경</button>
+                        </div>
+                    </div>
+                `;
+            }
+            container.innerHTML = content;
+        }
+
+        // 기능 함수들
+        function updateExp() {
+            const level = parseInt(document.getElementById('level-input').value);
+            const exp = parseInt(document.getElementById('exp-input').value);
+
+            if (isNaN(level) || isNaN(exp) || level < 0 || exp < 0 || exp >= 100) {
+                Swal.fire('오류', '레벨과 경험치를 올바르게 입력해주세요. 경험치는 0~99 사이여야 합니다.', 'error');
+                return;
+            }
+
+            const student = schoolData.students.find(s => s.id === selectedStudentId);
+            student.totalExp = level * 100 + exp;
+            saveData();
+            renderContentArea();
+            Swal.fire('성공', '레벨과 경험치가 수정되었습니다.', 'success');
+        }
+
+        function calculateTotalGainedExp() {
+            let total = 0;
+            document.querySelectorAll('.exp-checkbox:checked').forEach(cb => {
+                total += parseInt(cb.dataset.exp);
+            });
+            
+            const titleCount = parseInt(document.getElementById('title-count').value) || 0;
+            total += titleCount * 40;
+            
+            const etcExp = parseInt(document.getElementById('etc-exp').value) || 0;
+            if (!isNaN(etcExp)) {
+                total += etcExp;
+            }
+            
+            document.getElementById('total-gained-exp').innerText = total;
+        }
+
+        function submitExp() {
+            const totalExpGained = parseInt(document.getElementById('total-gained-exp').innerText);
+            
+            if (isNaN(totalExpGained) || totalExpGained <= 0) {
+                Swal.fire('알림', '획득한 경험치가 없습니다.', 'info');
+                return;
+            }
+
+            const student = schoolData.students.find(s => s.id === selectedStudentId);
+            student.totalExp += totalExpGained;
+
+            const today = new Date();
+            const dateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            student.lastExpSubmissionDate = dateString;
+
+            saveData();
+            renderContentArea();
+            
+            Swal.fire('등록 완료!', `경험치 ${totalExpGained}점이 등록되었습니다.`, 'success').then(() => {
+                renderExpTab();
+            });
+        }
+        
+        function updateStamp(stampName, change) {
+            const student = schoolData.students.find(s => s.id === selectedStudentId);
+            student.stamps[stampName] += change;
+            if (student.stamps[stampName] < 0) student.stamps[stampName] = 0;
+            saveData();
+            renderStampsTab();
+        }
+
+        function requestStamp() {
+            const select = document.getElementById('stamp-request-select');
+            const stampName = select.value;
+
+            if (!stampName) return;
+
+            const student = schoolData.students.find(s => s.id === selectedStudentId);
+            const today = new Date();
+            const dateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            
+            student.pendingStamps.push({
+                name: stampName,
+                date: dateString
+            });
+
+            saveData();
+            renderStampsTab();
+            Swal.fire('요청 완료!', `${stampName} 도장을 선생님께 요청했습니다.`, 'success');
+        }
+
+        function handleStampRequest(index, isApproved) {
+            const student = schoolData.students.find(s => s.id === selectedStudentId);
+            const pendingStamp = student.pendingStamps[index];
+
+            if (isApproved) {
+                if (!student.stamps[pendingStamp.name]) {
+                    student.stamps[pendingStamp.name] = 0;
+                }
+                student.stamps[pendingStamp.name] += 1;
+                Swal.fire('승인 완료', `${pendingStamp.name} 요청을 승인했습니다.`, 'success');
+            } else {
+                Swal.fire('반려 완료', `${pendingStamp.name} 요청을 반려했습니다.`, 'info');
+            }
+
+            student.pendingStamps.splice(index, 1);
+            saveData();
+            renderStampsTab();
+        }
+
+        // 칭호 관련
+        async function addTitle() {
+            const { value: formValues } = await Swal.fire({
+                title: '칭호 추가',
+                html:
+                    '<input id="swal-input1" class="swal2-input" placeholder="획득한 칭호">' +
+                    '<input id="swal-input2" class="swal2-input" placeholder="성장한 점">',
+                focusConfirm: false,
+                preConfirm: () => {
+                    return [
+                        document.getElementById('swal-input1').value,
+                        document.getElementById('swal-input2').value
+                    ]
+                }
+            });
+
+            if (formValues && formValues[0]) {
+                const student = schoolData.students.find(s => s.id === selectedStudentId);
+                const today = new Date();
+                const dateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                
+                student.titles.push({
+                    date: dateString,
+                    name: formValues[0],
+                    growth: formValues[1]
+                });
+                saveData();
+                renderTitlesTab();
+            }
+        }
+
+        async function editTitle(index) {
+            const student = schoolData.students.find(s => s.id === selectedStudentId);
+            const title = student.titles[index];
+            
+            const { value: formValues } = await Swal.fire({
+                title: '칭호 수정',
+                html:
+                    `<input id="swal-input1" class="swal2-input" placeholder="획득한 칭호" value="${title.name}">` +
+                    `<input id="swal-input2" class="swal2-input" placeholder="성장한 점" value="${title.growth}">`,
+                focusConfirm: false,
+                preConfirm: () => {
+                    return [
+                        document.getElementById('swal-input1').value,
+                        document.getElementById('swal-input2').value
+                    ]
+                }
+            });
+
+            if (formValues && formValues[0]) {
+                student.titles[index].name = formValues[0];
+                student.titles[index].growth = formValues[1];
+                saveData();
+                renderTitlesTab();
+            }
+        }
+
+        function deleteTitle(index) {
+            Swal.fire({
+                title: '정말 삭제하시겠습니까?',
+                text: "삭제한 칭호는 되돌릴 수 없습니다.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: '삭제',
+                cancelButtonText: '취소'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const student = schoolData.students.find(s => s.id === selectedStudentId);
+                    student.titles.splice(index, 1);
+                    saveData();
+                    renderTitlesTab();
+                    Swal.fire('삭제 완료!', '칭호가 삭제되었습니다.', 'success');
+                }
+            })
+        }
+        
+        // 비밀번호 변경
+        function changeTeacherPassword() {
+            const currentPw = document.getElementById('current-pw').value;
+            const newPw = document.getElementById('new-pw').value;
+            const confirmPw = document.getElementById('confirm-pw').value;
+
+            if (currentPw !== schoolData.teacherPassword) {
+                Swal.fire('오류', '현재 비밀번호가 일치하지 않습니다.', 'error');
+                return;
+            }
+            if (!newPw || newPw !== confirmPw) {
+                Swal.fire('오류', '새 비밀번호가 일치하지 않거나 비어있습니다.', 'error');
+                return;
+            }
+
+            schoolData.teacherPassword = newPw;
+            saveData();
+            Swal.fire('성공', '교사 비밀번호가 변경되었습니다.', 'success');
+            renderSettingsTab();
+        }
+
+        function changeStudentPassword() {
+            const student = schoolData.students.find(s => s.id === selectedStudentId);
+            const currentPw = document.getElementById('current-pw-student').value;
+            const newPw = document.getElementById('new-pw-student').value;
+            const confirmPw = document.getElementById('confirm-pw-student').value;
+            
+            if (currentPw !== student.password) {
+                 Swal.fire('오류', '현재 비밀번호가 일치하지 않습니다.', 'error');
+                return;
+            }
+            if (!newPw || newPw !== confirmPw) {
+                 Swal.fire('오류', '새 비밀번호가 일치하지 않거나 비어있습니다.', 'error');
+                return;
+            }
+            
+            student.password = newPw;
+            saveData();
+            Swal.fire('성공', '비밀번호가 변경되었습니다.', 'success');
+            renderSettingsTab();
+        }
+
+
+        // 앱 초기화
+        window.onload = function() {
+            loadData();
+            showInitialScreen();
+        };
+    </script>
+
+</body>
+</html>
+
+
